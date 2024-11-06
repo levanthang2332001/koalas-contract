@@ -23,20 +23,28 @@ contract koalas is IKoalasToken, Ownable, ERC721Checkpointable {
     // Mapping owner address to token count
     mapping(address => uint256) private _balances;
 
+    // Koalas descriptor
     IKoalasDescriptor public descriptor;
 
+    // Koalas seeder
     IKoalasSeeder public seeder;
 
+    // Proxy registry for OpenSea
     IProxyRegistry public immutable proxyRegistry;
 
+    // Check if the minter is locked
     bool public isMinterLocked;
 
+    // Check if the descriptor is locked
     bool public isDescriptorLocked;
 
+    // Check if the seeder is locked
     bool public isSeedLocked;
 
+    // Mapping from token ID to seed
     mapping(uint256 => IKoalasSeeder.Seed) public seeds;
 
+    // Current Koalas ID
     uint256 private _currentKoalasId;
 
     // IPFS hash of the contract URI (152)
@@ -71,7 +79,18 @@ contract koalas is IKoalasToken, Ownable, ERC721Checkpointable {
         _;
     }
 
-    constructor(IProxyRegistry _proxyRegistry) ERC721("Koalas", "KOALAS") {
+    // Constructor
+    constructor(
+        address _koalasersDAO,
+        address _minter,
+        IKoalasDescriptor _descriptor,
+        IKoalasSeeder _seeder,
+        IProxyRegistry _proxyRegistry
+    ) ERC721("Koalas", "KOALAS") {
+        koalasersDAO = _koalasersDAO;
+        minter = _minter;
+        descriptor = _descriptor;
+        seeder = _seeder;
         proxyRegistry = _proxyRegistry;
     }
 
