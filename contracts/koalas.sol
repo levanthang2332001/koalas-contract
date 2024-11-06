@@ -10,7 +10,7 @@ import {ERC721} from "./base/ERC721.sol";
 import {ERC721Checkpointable} from "./base/ERC721Checkpointable.sol";
 import {IERC721} from "../@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-contract koalas_v1 is IKoalasToken, Ownable, ERC721Checkpointable {
+contract koalas is IKoalasToken, Ownable, ERC721Checkpointable {
     // The Koalaser DAO address
     address public koalasersDAO;
 
