@@ -129,3 +129,4 @@ interface IKoalasDescriptor {
         IKoalasSeeder.Seed memory seed
     ) external view returns (string memory);
 }
+
