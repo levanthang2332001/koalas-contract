@@ -7,5 +7,4 @@ import type * as external from "./external";
 export type { external };
 import type * as interfaces from "./interfaces";
 export type { interfaces };
-import type * as koalasSol from "./koalas.sol";
-export type { koalasSol };
+export type { Koalas } from "./Koalas";

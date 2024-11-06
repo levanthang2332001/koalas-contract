@@ -34,5 +34,5 @@ export type { IKoalasSeeder } from "./contracts/interfaces/IKoalasSeeder";
 export { IKoalasSeeder__factory } from "./factories/contracts/interfaces/IKoalasSeeder__factory";
 export type { IKoalasToken } from "./contracts/interfaces/IKoalasToken";
 export { IKoalasToken__factory } from "./factories/contracts/interfaces/IKoalasToken__factory";
-export type { Koalas_v1 } from "./contracts/koalas.sol/Koalas_v1";
-export { Koalas_v1__factory } from "./factories/contracts/koalas.sol/Koalas_v1__factory";
+export type { Koalas } from "./contracts/Koalas";
+export { Koalas__factory } from "./factories/contracts/Koalas__factory";

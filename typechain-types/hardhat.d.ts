@@ -70,9 +70,9 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IKoalasToken__factory>;
     getContractFactory(
-      name: "Koalas_v1",
+      name: "Koalas",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.Koalas_v1__factory>;
+    ): Promise<Contracts.Koalas__factory>;
 
     getContractAt(
       name: "Ownable",
@@ -145,10 +145,10 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.IKoalasToken>;
     getContractAt(
-      name: "Koalas_v1",
+      name: "Koalas",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.Koalas_v1>;
+    ): Promise<Contracts.Koalas>;
 
     deployContract(
       name: "Ownable",
@@ -207,9 +207,9 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IKoalasToken>;
     deployContract(
-      name: "Koalas_v1",
+      name: "Koalas",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.Koalas_v1>;
+    ): Promise<Contracts.Koalas>;
 
     deployContract(
       name: "Ownable",
@@ -282,10 +282,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IKoalasToken>;
     deployContract(
-      name: "Koalas_v1",
+      name: "Koalas",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.Koalas_v1>;
+    ): Promise<Contracts.Koalas>;
 
     // default types
     getContractFactory(

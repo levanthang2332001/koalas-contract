@@ -4,4 +4,4 @@
 export * as base from "./base";
 export * as external from "./external";
 export * as interfaces from "./interfaces";
-export * as koalasSol from "./koalas.sol";
+export { Koalas__factory } from "./Koalas__factory";
