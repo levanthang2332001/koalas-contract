@@ -1,0 +1,417 @@
+address public KoalasDAO
+    - Nhận NFT tự động (mỗi 10 token trong 500 token đầu)
+    - Cập nhật địa chỉ DAO mới
+    - Quản lý các quyết định quan trọng của dự án
+
+address public minter;
+    - Gọi hàm mint() để tạo NFT mới
+    - Thường là địa chỉ của smart contract sale/auction hoặc ví admin
+
+IKoalasDescriptor public descriptor;
+    - Metadata của NFT
+    - Các thành phần hình ảnh (background, fur, face,...)
+    - Tạo SVG và URI cho token
+
+IKoalasSeeder public seeder;
+    - Tạo seed ngẫu nhiên cho mỗi NFT
+    - Quyết định các thuộc tính của NFT dựa trên seed
+    - Đảm bảo tính ngẫu nhiên và độc nhất của mỗi token
+
+IProxyRegistry public immutable proxyRegistry;
+    - Cho phép giao dịch trên OpenSea mà không cần approve
+    - Tối ưu UX khi listing NFT lần đầu
+    - Tiết kiệm gas cho người dùng
+
+
+
+Có một số cách để cho phép user mint NFT. Tôi sẽ giải thích các phương án phổ biến:
+
+### 1. Public Mint Function
+
+```solidity:contracts/koalas.sol
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    uint256 public constant PRICE = 0.1 ether;  // Giá mint
+    uint256 public constant MAX_SUPPLY = 10000; // Số lượng tối đa
+    bool public isPublicMintEnabled = false;    // Toggle public mint
+
+    // Cho phép public mint
+    function togglePublicMint() external onlyOwner {
+        isPublicMintEnabled = !isPublicMintEnabled;
+    }
+
+    // Hàm mint cho user
+    function publicMint() external payable {
+        require(isPublicMintEnabled, "Public mint is not enabled");
+        require(msg.value == PRICE, "Wrong price");
+        require(_currentKoalasId < MAX_SUPPLY, "Exceeded max supply");
+        
+        _mintTo(msg.sender, _currentKoalasId++);
+    }
+}
+```
+
+### 2. Whitelist Mint
+
+```solidity:contracts/koalas.sol
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    mapping(address => bool) public whitelist;
+    uint256 public whitelistPrice = 0.08 ether; // Giá ưu đãi cho whitelist
+
+    // Thêm địa chỉ vào whitelist
+    function addToWhitelist(address[] calldata addresses) external onlyOwner {
+        for(uint i = 0; i < addresses.length; i++) {
+            whitelist[addresses[i]] = true;
+        }
+    }
+
+    // Mint cho user trong whitelist
+    function whitelistMint() external payable {
+        require(whitelist[msg.sender], "Not whitelisted");
+        require(msg.value == whitelistPrice, "Wrong price");
+        require(_currentKoalasId < MAX_SUPPLY, "Exceeded max supply");
+        
+        whitelist[msg.sender] = false; // Một địa chỉ chỉ mint được 1 lần
+        _mintTo(msg.sender, _currentKoalasId++);
+    }
+}
+```
+
+### 3. Mint với Merkle Proof (hiệu quả cho whitelist lớn)
+
+```solidity:contracts/koalas.sol
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    bytes32 public merkleRoot;
+    
+    function setMerkleRoot(bytes32 _merkleRoot) external onlyOwner {
+        merkleRoot = _merkleRoot;
+    }
+
+    function mintWithProof(bytes32[] calldata proof) external payable {
+        bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
+        require(
+            MerkleProof.verify(proof, merkleRoot, leaf),
+            "Invalid proof"
+        );
+        require(msg.value == PRICE, "Wrong price");
+        
+        _mintTo(msg.sender, _currentKoalasId++);
+    }
+}
+```
+
+### 4. Mint với số lượng giới hạn mỗi ví
+
+```solidity:contracts/koalas.sol
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    uint256 public constant MAX_PER_WALLET = 3;
+    mapping(address => uint256) public mintedCount;
+
+    function mint(uint256 quantity) external payable {
+        require(isPublicMintEnabled, "Mint not enabled");
+        require(
+            mintedCount[msg.sender] + quantity <= MAX_PER_WALLET,
+            "Exceeded max per wallet"
+        );
+        require(msg.value == PRICE * quantity, "Wrong price");
+        
+        mintedCount[msg.sender] += quantity;
+        for(uint256 i = 0; i < quantity; i++) {
+            _mintTo(msg.sender, _currentKoalasId++);
+        }
+    }
+}
+```
+
+### 5. Mint theo giai đoạn
+
+```solidity:contracts/koalas.sol
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    enum Phase { CLOSED, WHITELIST, PUBLIC }
+    Phase public currentPhase = Phase.CLOSED;
+    
+    mapping(Phase => uint256) public pricePerPhase;
+    
+    function setPhase(Phase _phase) external onlyOwner {
+        currentPhase = _phase;
+    }
+    
+    function mint() external payable {
+        require(currentPhase != Phase.CLOSED, "Minting is closed");
+        require(msg.value == pricePerPhase[currentPhase], "Wrong price");
+        
+        if(currentPhase == Phase.WHITELIST) {
+            require(whitelist[msg.sender], "Not whitelisted");
+        }
+        
+        _mintTo(msg.sender, _currentKoalasId++);
+    }
+}
+```
+
+### Triển khai trên frontend:
+
+```javascript
+// Ví dụ với ethers.js
+const mintNFT = async () => {
+  try {
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+    
+    // Public mint
+    const tx = await contract.publicMint({
+      value: ethers.utils.parseEther("0.1")
+    });
+    
+    // Hoặc whitelist mint với proof
+    const proof = getMerkleProof(address); // Generate proof từ backend
+    const tx = await contract.mintWithProof(proof, {
+      value: ethers.utils.parseEther("0.08")
+    });
+    
+    await tx.wait();
+    alert("Mint successful!");
+  } catch (error) {
+    console.error("Mint failed:", error);
+  }
+}
+```
+
+Lưu ý quan trọng:
+1. Nên có cơ chế pause/unpause để xử lý tình huống khẩn cấp
+2. Implement withdraw function để rút ETH từ contract
+3. Có giới hạn số lượng mint mỗi transaction để tránh gas wars
+4. Có thể thêm refund mechanism nếu mint fail
+5. Nên có event để track mint activity
+
+
+---------------------------------------------------------------------------------
+
+
+
+Tôi sẽ hướng dẫn cách update metadata và hiển thị ảnh trên contract:
+
+### 1. Update Metadata qua BaseURI
+
+```solidity:contracts/koalas.sol
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    string private _baseTokenURI;
+    mapping(uint256 => string) private _tokenURIs;
+
+    // Update base URI cho tất cả token
+    function setBaseURI(string memory baseURI) external onlyOwner {
+        _baseTokenURI = baseURI;
+    }
+
+    // Update URI cho token cụ thể
+    function setTokenURI(uint256 tokenId, string memory _tokenURI) external onlyOwner {
+        require(_exists(tokenId), "Token does not exist");
+        _tokenURIs[tokenId] = _tokenURI;
+    }
+
+    // Override tokenURI function
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        require(_exists(tokenId), "Token does not exist");
+
+        // Nếu token có URI riêng
+        if (bytes(_tokenURIs[tokenId]).length > 0) {
+            return _tokenURIs[tokenId];
+        }
+
+        // Nếu không, sử dụng base URI
+        return string(abi.encodePacked(_baseTokenURI, tokenId.toString()));
+    }
+}
+```
+
+### 2. On-chain Metadata với SVG
+
+```solidity:contracts/koalas.sol
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    // Struct cho metadata
+    struct KoalaMetadata {
+        string name;
+        string description;
+        string background;
+        string fur;
+        string accessories;
+    }
+    
+    mapping(uint256 => KoalaMetadata) public koalaMetadata;
+
+    // Update metadata cho token
+    function updateMetadata(
+        uint256 tokenId,
+        string memory name,
+        string memory description,
+        string memory background,
+        string memory fur,
+        string memory accessories
+    ) external onlyOwner {
+        require(_exists(tokenId), "Token does not exist");
+        
+        koalaMetadata[tokenId] = KoalaMetadata(
+            name,
+            description,
+            background,
+            fur,
+            accessories
+        );
+    }
+
+    // Tạo SVG image từ metadata
+    function generateSVG(uint256 tokenId) public view returns (string memory) {
+        KoalaMetadata memory metadata = koalaMetadata[tokenId];
+        
+        return string(abi.encodePacked(
+            '<svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">',
+            '<style>.base { fill: white; font-family: serif; font-size: 14px; }</style>',
+            '<rect width="100%" height="100%" fill="', metadata.background, '"/>',
+            metadata.fur,
+            metadata.accessories,
+            '</svg>'
+        ));
+    }
+
+    // Tạo base64 encoded metadata
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        require(_exists(tokenId), "Token does not exist");
+        
+        KoalaMetadata memory metadata = koalaMetadata[tokenId];
+        string memory image = generateSVG(tokenId);
+        
+        return string(abi.encodePacked(
+            'data:application/json;base64,',
+            Base64.encode(bytes(abi.encodePacked(
+                '{"name":"', metadata.name,
+                '","description":"', metadata.description,
+                '","image":"data:image/svg+xml;base64,', 
+                Base64.encode(bytes(image)),
+                '","attributes":[',
+                '{"trait_type":"Background","value":"', metadata.background, '"},',
+                '{"trait_type":"Fur","value":"', metadata.fur, '"},',
+                '{"trait_type":"Accessories","value":"', metadata.accessories, '"}',
+                ']}'
+            )))
+        ));
+    }
+}
+```
+
+### 3. Batch Update Metadata
+
+```solidity:contracts/koalas.sol
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    // Batch update metadata
+    function batchUpdateMetadata(
+        uint256[] calldata tokenIds,
+        KoalaMetadata[] calldata metadatas
+    ) external onlyOwner {
+        require(tokenIds.length == metadatas.length, "Length mismatch");
+        
+        for(uint i = 0; i < tokenIds.length; i++) {
+            require(_exists(tokenIds[i]), "Token does not exist");
+            koalaMetadata[tokenIds[i]] = metadatas[i];
+        }
+    }
+}
+```
+
+### 4. Reveal Mechanism
+
+```solidity:contracts/koalas.sol
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    bool public revealed = false;
+    string public notRevealedUri;
+    
+    function reveal() external onlyOwner {
+        revealed = true;
+    }
+    
+    function setNotRevealedURI(string memory _notRevealedURI) external onlyOwner {
+        notRevealedUri = _notRevealedURI;
+    }
+    
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        require(_exists(tokenId), "Token does not exist");
+        
+        if(!revealed) {
+            return notRevealedUri;
+        }
+        
+        // Return actual metadata
+        return _generateTokenURI(tokenId);
+    }
+}
+```
+
+### 5. Sử dụng IPFS cho hình ảnh
+
+```solidity:contracts/koalas.sol
+contract Koalas is IKoalasToken, Ownable, ERC721Checkpointable {
+    mapping(uint256 => string) private _ipfsHashes;
+    
+    function setIPFSHash(uint256 tokenId, string memory ipfsHash) external onlyOwner {
+        require(_exists(tokenId), "Token does not exist");
+        _ipfsHashes[tokenId] = ipfsHash;
+    }
+    
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        require(_exists(tokenId), "Token does not exist");
+        
+        string memory ipfsHash = _ipfsHashes[tokenId];
+        
+        return string(abi.encodePacked(
+            'data:application/json;base64,',
+            Base64.encode(bytes(abi.encodePacked(
+                '{"name":"Koala #', tokenId.toString(),
+                '","description":"A unique Koala NFT",',
+                '"image":"ipfs://', ipfsHash,
+                '"}'
+            )))
+        ));
+    }
+}
+```
+
+### Triển khai trên frontend:
+
+```javascript
+// Fetch metadata
+const getMetadata = async (tokenId) => {
+  const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+  const tokenURI = await contract.tokenURI(tokenId);
+  
+  // Nếu là base64
+  if(tokenURI.startsWith('data:application/json;base64,')) {
+    const json = atob(tokenURI.split(',')[1]);
+    return JSON.parse(json);
+  }
+  
+  // Nếu là IPFS/HTTP
+  const response = await fetch(tokenURI);
+  return await response.json();
+}
+
+// Hiển thị hình ảnh
+const displayNFT = async (tokenId) => {
+  const metadata = await getMetadata(tokenId);
+  const image = metadata.image;
+  
+  if(image.startsWith('data:image/svg+xml;base64,')) {
+    // Hiển thị SVG trực tiếp
+    const svg = atob(image.split(',')[1]);
+    document.getElementById('nft-image').innerHTML = svg;
+  } else {
+    // Hiển thị hình ảnh từ IPFS/HTTP
+    document.getElementById('nft-image').src = image;
+  }
+}
+```
+
+Lưu ý:
+1. Nên có cơ chế cache metadata để giảm tải cho blockchain
+2. Xem xét sử dụng IPFS gateway cho hình ảnh để tăng tốc độ load
+3. Implement error handling cho các trường hợp metadata không hợp lệ
+4. Có thể thêm animation cho SVG
+5. Nên có backup cho metadata và hình ảnh 
